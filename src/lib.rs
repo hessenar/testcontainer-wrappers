@@ -59,7 +59,7 @@
 ///     }
 /// }
 /// ```
-mod kafka_test_wrapper{
+pub mod kafka_test_wrapper{
     use std::{net::{IpAddr, Ipv4Addr}, panic, time::Duration};
 
     use rdkafka::{admin::{AdminClient, AdminOptions, NewTopic, TopicReplication}, client::DefaultClientContext, consumer::{CommitMode, Consumer, StreamConsumer}, message::OwnedMessage, producer::{FutureProducer, FutureRecord}, ClientConfig};
