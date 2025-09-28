@@ -170,7 +170,7 @@ pub mod kafka_wrapper{
                 kafka_ui_container = Some(kui);
             }
 
-            KafkaTestContainers{ _zookeeper_container: zookeeper_container, _kafka_container: kafka_container, kafka_addr: kafka_addr, _kafka_ui_container: kafka_ui_container }
+            KafkaTestContainers{ _zookeeper_container: zookeeper_container, _kafka_container: kafka_container, kafka_addr: kafka_addr, _kafka_ui_container: kafka_ui_container, network_name: network }
         }
 
         /// Create new topic with rdkafka
@@ -250,13 +250,13 @@ mod test {
 
     use rdkafka::Message;
 
-    use crate::kafka_test_wrapper::{self, CreateTopic};
+    use crate::kafka_wrapper::{self, CreateTopic, KafkaTestContainers, KafkaTestContainersOptions, MessageToSend};
 
     #[tokio::test]
     async fn test_kafka_wrapper_standart_using() {
-        let kafka_wrapper = kafka_test_wrapper::KafkaTestContainers::init_containers(kafka_test_wrapper::KafkaTestContainersOptions::default()).await;
+        let kafka_wrapper = KafkaTestContainers::init_containers(KafkaTestContainersOptions::default()).await;
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4), ]).await;
-        let msgs = vec![kafka_test_wrapper::MessageToSend{key: "1", message: "message 1"}, kafka_test_wrapper::MessageToSend{key: "2", message: "message 2"}];
+        let msgs = vec![MessageToSend{key: "1", message: "message 1"}, MessageToSend{key: "2", message: "message 2"}];
         kafka_wrapper.send_data_to_topic("test_topic", &msgs).await;
         kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(10), |msg| async move {
             let key = String::from_utf8_lossy(msg.key().unwrap());
@@ -269,9 +269,9 @@ mod test {
     #[tokio::test]
     #[should_panic]
     async fn test_kafka_wrapper_should_panic_incorrect_topic() {
-        let kafka_wrapper = kafka_test_wrapper::KafkaTestContainers::init_containers(kafka_test_wrapper::KafkaTestContainersOptions::default()).await;
+        let kafka_wrapper = KafkaTestContainers::init_containers(KafkaTestContainersOptions::default()).await;
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4),]).await;
-        let msgs = vec![kafka_test_wrapper::MessageToSend{key: "1", message: "message 1"}, kafka_test_wrapper::MessageToSend{key: "2", message: "message 2"}];
+        let msgs = vec![MessageToSend{key: "1", message: "message 1"}, MessageToSend{key: "2", message: "message 2"}];
         kafka_wrapper.send_data_to_topic("test_topic_2", &msgs).await;
         kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(5), |msg| async move {
             let key = String::from_utf8_lossy(msg.key().unwrap());
@@ -284,7 +284,7 @@ mod test {
     #[tokio::test]
     #[should_panic]
     async fn test_kafka_wrapper_should_panic_not_message_timeout() {
-        let kafka_wrapper = kafka_test_wrapper::KafkaTestContainers::init_containers(kafka_test_wrapper::KafkaTestContainersOptions::default()).await;
+        let kafka_wrapper = KafkaTestContainers::init_containers(KafkaTestContainersOptions::default()).await;
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4), ]).await;
         kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(5), |msg| async move {
             let key = String::from_utf8_lossy(msg.key().unwrap());
@@ -297,9 +297,9 @@ mod test {
     #[tokio::test]
     #[should_panic]
     async fn test_kafka_wrapper_should_panic_not_all_expect_message_return() {
-        let kafka_wrapper = kafka_test_wrapper::KafkaTestContainers::init_containers(kafka_test_wrapper::KafkaTestContainersOptions::default()).await;
+        let kafka_wrapper = KafkaTestContainers::init_containers(KafkaTestContainersOptions::default()).await;
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4)]).await;
-        let msgs = vec![kafka_test_wrapper::MessageToSend{key: "1", message: "message 1"}, kafka_test_wrapper::MessageToSend{key: "2", message: "message 2"}];
+        let msgs = vec![MessageToSend{key: "1", message: "message 1"}, MessageToSend{key: "2", message: "message 2"}];
         kafka_wrapper.send_data_to_topic("test_topic", &msgs).await;
         kafka_wrapper.handle_msgs_from_topic("test_topic", 3, Duration::from_secs(5), |msg| async move {
             let key = String::from_utf8_lossy(msg.key().unwrap());
