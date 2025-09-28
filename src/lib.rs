@@ -111,7 +111,9 @@ pub mod kafka_wrapper{
         /// Need save, overwise rust will drop after create.
         _kafka_ui_container: Option<ContainerAsync<GenericImage>>,
         /// kafka container port for using in tests
-        pub kafka_addr: String
+        pub kafka_addr: String,
+        /// wrapper network name
+        pub network_name: String,
     }
 
     impl KafkaTestContainers{
