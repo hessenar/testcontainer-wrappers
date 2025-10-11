@@ -115,6 +115,10 @@ pub mod kafka_wrapper{
         /// wrapper network name
         pub network_name: String,
     }
+    
+    pub struct HandlerData<T>{
+        pub data: T
+    }
 
     impl KafkaTestContainers{
         /// Initialize zookeper, kafka, kafka-ui(optional) container in network with random uuid.
@@ -200,10 +204,9 @@ pub mod kafka_wrapper{
         /// Get message from earliest in topic and Handle message by message.
         /// If count lower than `expected_count` or message is not in the topic at `required_time`
         /// then fn panics.
-        pub async fn handle_msgs_from_topic<H, Fut>(&self, topic: &str, expected_count: i32, required_time: Duration, handler: H)
-    where
-            H: Fn(OwnedMessage) -> Fut + Send + Sync + 'static,
-            Fut: Future<Output = ()> + Send + 'static
+        pub async fn handle_msgs_from_topic<H, T>(&self, topic: &str, expected_count: i32, required_time: Duration, handler_data: &mut HandlerData<T>, handler: H)
+            where
+                H: Fn(OwnedMessage, &mut HandlerData<T>) -> ()
         {
             let consumer: StreamConsumer = ClientConfig::new()
                 .set("bootstrap.servers", &self.kafka_addr)
@@ -224,7 +227,7 @@ pub mod kafka_wrapper{
                     Ok(rm) =>{
                         match rm {
                             Ok(m) => {
-                                handler(m.detach()).await;
+                                handler(m.detach(), handler_data);
                                 consumer.commit_message(&m, CommitMode::Async).unwrap();
                             },
                             Err(e) => panic!("{e}"),
@@ -234,6 +237,7 @@ pub mod kafka_wrapper{
                 }
             }
         }
+
 
         fn ip_to_bytes(ip: IpAddr) -> [u8;4] {
             match ip {
@@ -250,7 +254,7 @@ mod test {
 
     use rdkafka::Message;
 
-    use crate::kafka_wrapper::{self, CreateTopic, KafkaTestContainers, KafkaTestContainersOptions, MessageToSend};
+    use crate::kafka_wrapper::{CreateTopic, HandlerData, KafkaTestContainers, KafkaTestContainersOptions, MessageToSend};
 
     #[tokio::test]
     async fn test_kafka_wrapper_standart_using() {
@@ -258,12 +262,15 @@ mod test {
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4), ]).await;
         let msgs = vec![MessageToSend{key: "1", message: "message 1"}, MessageToSend{key: "2", message: "message 2"}];
         kafka_wrapper.send_data_to_topic("test_topic", &msgs).await;
-        kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(10), |msg| async move {
+        let mut handler_data = HandlerData{data: 0};
+        kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(10), &mut handler_data, |msg, hd| {
             let key = String::from_utf8_lossy(msg.key().unwrap());
             let value = String::from_utf8_lossy(msg.payload().unwrap());
             assert!(!key.is_empty());
             assert!(!value.is_empty());
+            hd.data+=1;
         }).await;
+        assert_eq!(handler_data.data, msgs.len());
     }
 
     #[tokio::test]
@@ -273,7 +280,8 @@ mod test {
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4),]).await;
         let msgs = vec![MessageToSend{key: "1", message: "message 1"}, MessageToSend{key: "2", message: "message 2"}];
         kafka_wrapper.send_data_to_topic("test_topic_2", &msgs).await;
-        kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(5), |msg| async move {
+        let mut handler_data = HandlerData{data: ()};
+        kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(5), &mut handler_data, |msg, _| {
             let key = String::from_utf8_lossy(msg.key().unwrap());
             let value = String::from_utf8_lossy(msg.payload().unwrap());
             assert!(!key.is_empty());
@@ -286,7 +294,8 @@ mod test {
     async fn test_kafka_wrapper_should_panic_not_message_timeout() {
         let kafka_wrapper = KafkaTestContainers::init_containers(KafkaTestContainersOptions::default()).await;
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4), ]).await;
-        kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(5), |msg| async move {
+        let mut handler_data = HandlerData{data: ()};
+        kafka_wrapper.handle_msgs_from_topic("test_topic", 2, Duration::from_secs(5), &mut handler_data, |msg, _| {
             let key = String::from_utf8_lossy(msg.key().unwrap());
             let value = String::from_utf8_lossy(msg.payload().unwrap());
             assert!(!key.is_empty());
@@ -299,9 +308,10 @@ mod test {
     async fn test_kafka_wrapper_should_panic_not_all_expect_message_return() {
         let kafka_wrapper = KafkaTestContainers::init_containers(KafkaTestContainersOptions::default()).await;
         kafka_wrapper.create_new_topics(&[CreateTopic::new("test_topic", 4)]).await;
+        let mut handler_data = HandlerData{data: ()};
         let msgs = vec![MessageToSend{key: "1", message: "message 1"}, MessageToSend{key: "2", message: "message 2"}];
         kafka_wrapper.send_data_to_topic("test_topic", &msgs).await;
-        kafka_wrapper.handle_msgs_from_topic("test_topic", 3, Duration::from_secs(5), |msg| async move {
+        kafka_wrapper.handle_msgs_from_topic("test_topic", 3, Duration::from_secs(5), &mut handler_data, |msg, _| {
             let key = String::from_utf8_lossy(msg.key().unwrap());
             let value = String::from_utf8_lossy(msg.payload().unwrap());
             assert!(!key.is_empty());
